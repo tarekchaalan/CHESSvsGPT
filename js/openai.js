@@ -109,13 +109,6 @@ async function getAIMove(fen, customPrompt = null) {
   const systemPrompt = customPrompt || getGameStatePrompt(fen);
   const userPrompt = `Make your move as Black.`;
 
-  // Log the prompts
-  console.log("=== AI Move Prompt ===");
-  console.log("System Prompt:", systemPrompt);
-  console.log("User Prompt:", userPrompt);
-  console.log("Model:", model);
-  console.log("====================");
-
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
