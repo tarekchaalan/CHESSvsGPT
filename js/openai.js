@@ -1,5 +1,3 @@
-// js/openai.js
-
 // API Key Management
 function getStoredApiKey() {
   return localStorage.getItem("openai_api_key");

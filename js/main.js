@@ -1,7 +1,3 @@
-// js/main.js
-
-console.log("Chess is a", typeof Chess); // should be "function"
-
 const game = new Chess();
 let userPlayingForAI = false;
 
