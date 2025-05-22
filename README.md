@@ -1,4 +1,4 @@
-# CHESSvsGPT
+# ♟︎ CHESSvsGPT ♟️
 
 A web-based chess game where you can play against different OpenAI models. The game features a beautiful chess interface and allows you to choose between various AI models for different levels of challenge.
 
