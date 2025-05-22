@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chess vs OpenAI</title>
+    <link rel="icon" href="favicon.svg" />
+    <link rel="stylesheet" href="css/chessboard-1.0.0.min.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>Chess vs OpenAI</h1>
+    <div id="board"></div>
+    <div id="status"></div>
+    <button id="apiKeyBtn" class="btn">Manage API Key</button>
+
+    <!-- API Key Modal -->
+    <div id="apiKeyModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>OpenAI API Key</h2>
+        <p>
+          Enter your OpenAI API key to play against GPT-4. Your key is stored
+          locally and never sent to our servers.
+        </p>
+        <input
+          type="password"
+          id="apiKeyInput"
+          placeholder="Enter your OpenAI API key"
+        />
+        <div class="model-selector">
+          <label for="modelSelect">Select AI Model:</label>
+          <select id="modelSelect" class="model-select">
+            <option value="gpt-4-0125-preview">
+              GPT-4.5 [Most advanced, best at complex strategy]
+            </option>
+            <option value="gpt-4-1106-preview">
+              GPT-4 Turbo [Very capable, faster than GPT-4]
+            </option>
+            <option value="gpt-4">GPT-4 [Strong performance, reliable]</option>
+            <option value="gpt-3.5-turbo">
+              GPT-3.5 Turbo [Basic chess understanding]
+            </option>
+          </select>
+        </div>
+        <div class="button-group">
+          <button id="saveApiKey" class="btn">Save Key</button>
+          <button id="removeApiKey" class="btn btn-danger">Remove Key</button>
+        </div>
+        <p id="apiKeyStatus" class="status-text"></p>
+      </div>
+    </div>
+
+    <script src="js/jquery.js"></script>
+    <script src="js/chess.js"></script>
+    <script src="js/chessboard.js"></script>
+    <script src="js/openai.js"></script>
+    <script src="js/main.js"></script>
+
+    <footer class="social-links">
+      <a
+        href="https://github.com/tarekchaalan/CHESSvsGPT"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="GitHub Repository"
+      >
+        <img src="img/github.svg" alt="GitHub" class="social-icon" />
+      </a>
+      <a
+        href="https://tarekchaalan.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Portfolio Website"
+      >
+        <img src="img/portfolio.svg" alt="Portfolio" class="social-icon" />
+      </a>
+    </footer>
+  </body>
+</html>

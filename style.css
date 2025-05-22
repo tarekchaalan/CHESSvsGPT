@@ -1,0 +1,266 @@
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+  background-color: #121212;
+  position: relative;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+#board {
+  width: min(40vw, 800px);
+  aspect-ratio: 1;
+  margin-bottom: 20px;
+}
+
+#status {
+  margin: 1rem 0;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  color: #fff;
+  text-align: center;
+  min-height: 1.5em;
+  width: 100%;
+  max-width: 800px;
+}
+
+h1 {
+  color: #fff;
+  margin-bottom: 1.5rem;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  text-align: center;
+}
+
+.btn {
+  background-color: #175dd7;
+  color: white;
+  padding: clamp(8px, 2vw, 12px) clamp(15px, 3vw, 20px);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: clamp(0.9rem, 1.5vw, 1rem);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background-color: #0d4bb3;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn img {
+  width: clamp(16px, 2vw, 20px);
+  height: clamp(16px, 2vw, 20px);
+  object-fit: contain;
+}
+
+.btn-danger {
+  background-color: #f44336;
+}
+
+.btn-danger:hover {
+  background-color: #da190b;
+}
+
+/* Modal styles */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.modal-content {
+  background-color: #fefefe;
+  margin: 5vh auto;
+  padding: clamp(15px, 3vw, 25px);
+  border: 1px solid #888;
+  width: min(90%, 500px);
+  border-radius: 8px;
+  position: relative;
+}
+
+.close {
+  color: #aaa;
+  float: right;
+  font-size: clamp(24px, 4vw, 28px);
+  font-weight: bold;
+  cursor: pointer;
+  position: absolute;
+  right: 15px;
+  top: 10px;
+}
+
+.close:hover {
+  color: black;
+}
+
+#apiKeyInput {
+  width: 100%;
+  padding: clamp(8px, 2vw, 12px);
+  margin: 10px 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: clamp(0.9rem, 1.5vw, 1rem);
+}
+
+.button-group {
+  display: flex;
+  gap: clamp(8px, 2vw, 12px);
+  margin: 15px 0;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.status-text {
+  color: #666;
+  font-style: italic;
+  margin-top: 10px;
+  font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+}
+
+#apiKeyBtn {
+  position: absolute;
+  top: clamp(10px, 2vw, 20px);
+  right: clamp(10px, 2vw, 20px);
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+  padding: 5px;
+  transition: color 0.3s ease;
+}
+
+#apiKeyBtn:hover {
+  color: #888;
+  background: none;
+}
+
+#apiKeyBtn:active {
+  transform: none;
+}
+
+/* Media Queries for very small screens */
+@media (max-width: 400px) {
+  .button-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  #apiKeyBtn {
+    position: static;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  body {
+    padding: 10px;
+  }
+}
+
+.model-selector {
+  margin: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-selector label {
+  color: #333;
+  font-size: clamp(0.9rem, 1.5vw, 1rem);
+}
+
+.model-select {
+  width: 100%;
+  padding: clamp(8px, 2vw, 12px);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: clamp(0.9rem, 1.5vw, 1rem);
+  background-color: white;
+  cursor: pointer;
+}
+
+.model-select:focus {
+  outline: none;
+  border-color: #175dd7;
+  box-shadow: 0 0 0 2px rgba(23, 93, 215, 0.2);
+}
+
+/* Footer and Social Links */
+.social-links {
+  position: absolute;
+  top: clamp(10px, 2vw, 20px);
+  left: clamp(10px, 2vw, 20px);
+  display: flex;
+  gap: clamp(10px, 2vw, 20px);
+  padding: clamp(8px, 1.5vw, 10px);
+  z-index: 100;
+}
+
+.social-links a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.social-links a:hover {
+  transform: scale(1.1);
+}
+
+.social-icon {
+  width: clamp(20px, 3vw, 24px);
+  height: clamp(20px, 3vw, 24px);
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.social-links a:hover .social-icon {
+  opacity: 1;
+}
+
+/* Media Queries for footer */
+@media (max-width: 400px) {
+  .social-links {
+    position: static;
+    margin: 20px 0;
+    transform: none;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .social-icon {
+    opacity: 0.9;
+  }
+}
+
+@media (max-height: 600px) {
+  .social-links {
+    position: static;
+    margin: 20px 0;
+    transform: none;
+  }
+}
