@@ -4,7 +4,7 @@ A web-based chess game where you can play against different OpenAI models. The g
 
 ## Live Demo
 
-Play the game online at [tarekchaalan.com](https://tarekchaalan.com/)
+Play the game online at [chess-vs-gpt.vercel.app](https://chess-vs-gpt.vercel.app/)
 
 ## Features
 
