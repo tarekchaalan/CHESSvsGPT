@@ -63,7 +63,11 @@
           (window.vaq = window.vaq || []).push(arguments);
         };
     </script>
-    <script defer src="/_vercel/insights/script.js"></script>
+    <script
+      defer
+      src="/_vercel/insights/script.js"
+      onerror="console.log('Analytics blocked by client')"
+    ></script>
 
     <footer class="social-links">
       <a
