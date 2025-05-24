@@ -170,7 +170,20 @@ board = Chessboard("board", {
   onDragStart,
   onDrop,
   onSnapEnd,
+  pieceTheme: "img/chesspieces/{piece}.png",
 });
+
+// Force board to resize after initialization
+window.addEventListener("resize", () => {
+  const boardElement = document.getElementById("board");
+  const size = Math.min(window.innerWidth * 0.9, window.innerHeight * 0.9, 600);
+  boardElement.style.width = `${size}px`;
+  boardElement.style.height = `${size}px`;
+  board.resize();
+});
+
+// Initial resize
+window.dispatchEvent(new Event("resize"));
 
 updateStatus();
 
