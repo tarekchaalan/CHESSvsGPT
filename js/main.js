@@ -1,8 +1,65 @@
 const game = new Chess();
 let userPlayingForAI = false;
 
+// Sound effects
+const captureSound = new Audio("sound/capture.mp3");
+const moveSelfSound = new Audio("sound/move-self.mp3");
+const moveOpponentSound = new Audio("sound/move-opponent.mp3");
+const moveCheckSound = new Audio("sound/move-check.mp3");
+const castleSound = new Audio("sound/castle.mp3");
+const promoteSound = new Audio("sound/promote.mp3");
+const gameEndSound = new Audio("sound/game-end.mp3");
+const gameStartSound = new Audio("sound/game-start.mp3");
+const illegalSound = new Audio("sound/illegal.mp3");
+const notifySound = new Audio("sound/notify.mp3");
+
+// Sound playing functions
+function playSound(audio) {
+  audio.currentTime = 0; // Reset to beginning
+  audio.play().catch((e) => console.log("Sound play failed:", e));
+}
+
+function playMoveSound(isPlayerMove = true) {
+  playSound(isPlayerMove ? moveSelfSound : moveOpponentSound);
+}
+
+function playCaptureSound() {
+  playSound(captureSound);
+}
+
+function playCheckSound() {
+  playSound(moveCheckSound);
+}
+
+function playCastleSound() {
+  playSound(castleSound);
+}
+
+function playPromoteSound() {
+  playSound(promoteSound);
+}
+
+function playGameEndSound() {
+  playSound(gameEndSound);
+}
+
+function playGameStartSound() {
+  playSound(gameStartSound);
+}
+
+function playIllegalSound() {
+  playSound(illegalSound);
+}
+
+function playNotifySound() {
+  playSound(notifySound);
+}
+
 // API Key Modal Management
 document.addEventListener("DOMContentLoaded", () => {
+  // Don't play game start sound automatically - wait for user interaction
+  // playGameStartSound();
+
   const modal = document.getElementById("apiKeyModal");
   const btn = document.getElementById("apiKeyBtn");
   const span = document.getElementsByClassName("close")[0];
@@ -11,18 +68,49 @@ document.addEventListener("DOMContentLoaded", () => {
   const removeApiKeyBtn = document.getElementById("removeApiKey");
   const apiKeyStatus = document.getElementById("apiKeyStatus");
   const modelSelect = document.getElementById("modelSelect");
+  const persistentStorageCheckbox =
+    document.getElementById("persistentStorage");
 
-  // Load saved API key and model if they exist
-  const savedKey = getStoredApiKey();
+  // Load saved preferences
   const savedModel = localStorage.getItem("openai_model") || "gpt-4";
-  if (savedKey) {
-    apiKeyInput.value = savedKey;
-    apiKeyStatus.textContent = "API key is saved";
-  }
+  const usePersistentStorage =
+    localStorage.getItem("use_persistent_storage") === "true";
   modelSelect.value = savedModel;
+  persistentStorageCheckbox.checked = usePersistentStorage;
+
+  // Load saved API key asynchronously with performance optimization
+  const loadSavedApiKey = async () => {
+    try {
+      // Show loading state
+      apiKeyStatus.textContent = "Loading saved API key...";
+      apiKeyStatus.className = "status-text";
+
+      const savedKey = await getStoredApiKey();
+      if (savedKey) {
+        apiKeyInput.value = savedKey;
+        apiKeyStatus.textContent = "API key is saved";
+        apiKeyStatus.className = "status-text success";
+      } else {
+        apiKeyStatus.textContent = "";
+        apiKeyStatus.className = "status-text";
+      }
+    } catch (error) {
+      console.error("Failed to load API key:", error);
+      apiKeyStatus.textContent = "Failed to load saved API key";
+      apiKeyStatus.className = "status-text error";
+    }
+  };
+
+  // Defer API key loading to avoid blocking the main thread
+  setTimeout(loadSavedApiKey, 100);
 
   // Modal open/close handlers
   btn.addEventListener("click", () => {
+    // Play game start sound on first user interaction
+    if (!window.userHasInteracted) {
+      playGameStartSound();
+      window.userHasInteracted = true;
+    }
     modal.style.display = "block";
   });
 
@@ -37,16 +125,33 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Save API key and model
-  saveApiKeyBtn.addEventListener("click", () => {
-    const key = apiKeyInput.value.trim();
+  saveApiKeyBtn.addEventListener("click", async () => {
+    const rawKey = apiKeyInput.value;
+    const sanitizedKey = sanitizeApiKey(rawKey);
     const model = modelSelect.value;
-    if (key) {
-      setStoredApiKey(key);
-      localStorage.setItem("openai_model", model);
-      apiKeyStatus.textContent = "API key and model saved successfully";
-      modal.style.display = "none";
-    } else {
-      apiKeyStatus.textContent = "Please enter a valid API key";
+    const usePersistentStorage = persistentStorageCheckbox.checked;
+
+    try {
+      if (sanitizedKey && isValidApiKey(sanitizedKey)) {
+        // Save storage preference first
+        localStorage.setItem(
+          "use_persistent_storage",
+          usePersistentStorage.toString()
+        );
+
+        await setStoredApiKey(sanitizedKey);
+        localStorage.setItem("openai_model", model);
+        apiKeyStatus.textContent = "API key and model saved successfully";
+        apiKeyStatus.className = "status-text success";
+        modal.style.display = "none";
+      } else {
+        apiKeyStatus.textContent =
+          "Please enter a valid OpenAI API key (starts with 'sk-', 'sk-proj-', or 'sk-org-')";
+        apiKeyStatus.className = "status-text error";
+      }
+    } catch (error) {
+      apiKeyStatus.textContent = "Error saving API key: " + error.message;
+      apiKeyStatus.className = "status-text error";
     }
   });
 
@@ -66,9 +171,29 @@ function onDragStart(source, piece) {
 }
 
 function onDrop(source, target) {
+  // Play game start sound on first user interaction
+  if (!window.userHasInteracted) {
+    playGameStartSound();
+    window.userHasInteracted = true;
+  }
+
   const move = game.move({ from: source, to: target, promotion: "q" });
 
-  if (!move) return "snapback";
+  if (!move) {
+    playIllegalSound();
+    return "snapback";
+  }
+
+  // Play sound based on move type
+  if (move.captured) {
+    playCaptureSound();
+  } else if (move.flags && move.flags.includes("k")) {
+    playCastleSound();
+  } else if (move.promotion) {
+    playPromoteSound();
+  } else {
+    playMoveSound(true); // Player move
+  }
 
   if (userPlayingForAI) {
     userPlayingForAI = false;
@@ -89,14 +214,23 @@ function updateStatus() {
   if (game.game_over()) {
     if (game.in_checkmate()) {
       statusEl.textContent = game.turn() === "w" ? "GPT4 Wins!" : "You Win!";
+      playGameEndSound(); // Play game end sound for checkmate
     } else if (game.in_draw()) {
       statusEl.textContent = "Draw!";
+      playGameEndSound(); // Play game end sound for draw
     } else {
       statusEl.textContent = "Game over.";
+      playGameEndSound(); // Play game end sound for other game over conditions
     }
   } else {
-    statusEl.textContent =
-      (game.turn() === "w" ? "White" : "Black") + " to move.";
+    if (game.in_check()) {
+      statusEl.textContent =
+        (game.turn() === "w" ? "White" : "Black") + " to move. Check!";
+      playNotifySound(); // Play notify sound for check
+    } else {
+      statusEl.textContent =
+        (game.turn() === "w" ? "White" : "Black") + " to move.";
+    }
   }
 }
 
@@ -140,6 +274,16 @@ async function makeAIMove() {
 
       const retryResult = game.move(retryMove, { sloppy: true });
       if (retryResult) {
+        // Play sound for AI retry move
+        if (retryResult.captured) {
+          playCaptureSound();
+        } else if (retryResult.flags && retryResult.flags.includes("k")) {
+          playCastleSound();
+        } else if (retryResult.promotion) {
+          playPromoteSound();
+        } else {
+          playMoveSound(false); // AI move
+        }
         board.position(game.fen());
         updateStatus();
       } else {
@@ -149,6 +293,17 @@ async function makeAIMove() {
           "AI made another illegal move. Please make a move for Black.";
       }
       return;
+    }
+
+    // Play sound for AI move
+    if (move.captured) {
+      playCaptureSound();
+    } else if (move.flags && move.flags.includes("k")) {
+      playCastleSound();
+    } else if (move.promotion) {
+      playPromoteSound();
+    } else {
+      playMoveSound(false); // AI move
     }
 
     board.position(game.fen());
@@ -192,6 +347,7 @@ function restartGame() {
   game.reset();
   board.position("start");
   userPlayingForAI = false;
+  playGameStartSound(); // Play game start sound
   updateStatus();
 }
 
