@@ -86,6 +86,87 @@ h1 {
   background-color: #da190b;
 }
 
+/* Export button special styling */
+#exportBtn {
+  background-color: #4caf50;
+  animation: fadeIn 0.3s ease-in;
+}
+
+#exportBtn:hover {
+  background-color: #45a049;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Export options modal styling */
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  margin: 20px 0;
+}
+
+.export-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-description {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+  padding-left: 4px;
+}
+
+.export-option-btn {
+  justify-content: flex-start;
+  text-align: left;
+  padding: 15px 20px;
+  background-color: #f8f9fa;
+  color: #333;
+  border: 2px solid #e9ecef;
+  transition: all 0.3s ease;
+}
+
+.export-option-btn:hover {
+  background-color: #e9ecef;
+  border-color: #175dd7;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.export-option-btn img {
+  margin-right: 12px;
+  width: 20px;
+  height: 20px;
+}
+
+#copyAndRedirectBtn {
+  background-color: #175dd7;
+  color: white;
+  border-color: #175dd7;
+}
+
+#copyAndRedirectBtn:hover {
+  background-color: #0d4bb3;
+  border-color: #0d4bb3;
+}
+
+#copyAndRedirectBtn img {
+  filter: brightness(0) invert(1);
+}
+
 /* Modal styles */
 .modal {
   display: none;

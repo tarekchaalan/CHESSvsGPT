@@ -222,6 +222,9 @@ function updateStatus() {
       statusEl.textContent = "Game over.";
       playGameEndSound(); // Play game end sound for other game over conditions
     }
+
+    // Show export button when game ends
+    showExportButton();
   } else {
     if (game.in_check()) {
       statusEl.textContent =
@@ -231,6 +234,9 @@ function updateStatus() {
       statusEl.textContent =
         (game.turn() === "w" ? "White" : "Black") + " to move.";
     }
+
+    // Hide export button during game
+    hideExportButton();
   }
 }
 
@@ -349,6 +355,7 @@ function restartGame() {
   userPlayingForAI = false;
   playGameStartSound(); // Play game start sound
   updateStatus();
+  hideExportButton(); // Hide export button when starting new game
 }
 
 function undoLastMove() {
@@ -378,6 +385,10 @@ document.getElementById("apiKeyBtn").insertAdjacentHTML(
       <img src="img/flip.svg" alt="Flip" />
       Flip Board
     </button>
+    <button id="exportBtn" class="btn" style="display: none;">
+      <img src="img/download.svg" alt="Export" />
+      Export Game
+    </button>
   </div>`
 );
 
@@ -388,3 +399,209 @@ document.getElementById("apiKeyBtn").textContent = "Manage API Key";
 document.getElementById("restartBtn").addEventListener("click", restartGame);
 document.getElementById("undoBtn").addEventListener("click", undoLastMove);
 document.getElementById("flipBtn").addEventListener("click", flipBoard);
+document.getElementById("exportBtn").addEventListener("click", exportGame);
+
+// Add these functions after the existing code
+function generatePGN() {
+  const model = localStorage.getItem("openai_model") || "gpt-4";
+  const modelDisplayName = getModelDisplayName(model);
+  const currentDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+
+  // Create a temporary game object to generate PGN with custom headers
+  const tempGame = new Chess();
+
+  // Copy the move history from the original game
+  const history = game.history();
+  for (const move of history) {
+    tempGame.move(move);
+  }
+
+  // Set custom headers
+  tempGame.header("Event", "Chess vs GPT Game");
+  tempGame.header("Site", "https://chess-vs-gpt.vercel.app/");
+  tempGame.header("Date", currentDate);
+  tempGame.header("Round", "1");
+  tempGame.header("White", "You");
+  tempGame.header("Black", modelDisplayName);
+  tempGame.header("WhiteElo", "?");
+  tempGame.header("BlackElo", "?");
+  tempGame.header("ECO", "?");
+
+  // Determine result
+  let result = "*"; // Ongoing game
+  if (game.game_over()) {
+    if (game.in_checkmate()) {
+      result = game.turn() === "w" ? "0-1" : "1-0"; // Black wins if white's turn (white was checkmated)
+    } else if (game.in_draw()) {
+      result = "1/2-1/2";
+    } else if (game.in_stalemate()) {
+      result = "1/2-1/2";
+    } else if (game.in_threefold_repetition()) {
+      result = "1/2-1/2";
+    } else if (game.insufficient_material()) {
+      result = "1/2-1/2";
+    } else {
+      result = "*";
+    }
+  }
+  tempGame.header("Result", result);
+
+  return tempGame.pgn();
+}
+
+function getModelDisplayName(model) {
+  const modelNames = {
+    "gpt-4-0125-preview": "GPT-4.5",
+    "gpt-4-1106-preview": "GPT-4 Turbo",
+    "gpt-4": "GPT-4",
+    "gpt-3.5-turbo": "GPT-3.5 Turbo",
+  };
+  return modelNames[model] || model;
+}
+
+function exportGame() {
+  try {
+    const pgn = generatePGN();
+
+    if (!pgn || pgn.trim() === "") {
+      throw new Error("Failed to generate PGN");
+    }
+
+    // Show export options modal
+    showExportOptionsModal(pgn);
+  } catch (error) {
+    console.error("Export failed:", error);
+    const statusEl = document.getElementById("status");
+    const originalText = statusEl.textContent;
+    statusEl.textContent = "Export failed. Please try again.";
+    setTimeout(() => {
+      statusEl.textContent = originalText;
+    }, 3000);
+  }
+}
+
+function showExportOptionsModal(pgn) {
+  // Create modal HTML
+  const modalHTML = `
+    <div id="exportOptionsModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Export Game</h2>
+        <div class="export-options">
+          <div class="export-option">
+            <button id="copyAndRedirectBtn" class="btn export-option-btn">
+              <img src="img/download.svg" alt="Copy" />
+              Copy PGN to clipboard & open ChessKit.org
+            </button>
+            <p class="export-description">When redirected, press "Load", paste the PGN, and press "ADD"</p>
+          </div>
+          <div class="export-option">
+            <button id="downloadOnlyBtn" class="btn export-option-btn">
+              <img src="img/download.svg" alt="Download" />
+              Download PGN file only
+            </button>
+            <p class="export-description">Use this option to upload the PGN to a chess engine of your choice.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Add modal to page
+  document.body.insertAdjacentHTML("beforeend", modalHTML);
+
+  const modal = document.getElementById("exportOptionsModal");
+  const closeBtn = modal.querySelector(".close");
+  const copyBtn = document.getElementById("copyAndRedirectBtn");
+  const downloadBtn = document.getElementById("downloadOnlyBtn");
+
+  // Show modal
+  modal.style.display = "block";
+
+  // Close modal handlers
+  closeBtn.addEventListener("click", () => {
+    modal.remove();
+  });
+
+  window.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      modal.remove();
+    }
+  });
+
+  // Copy and redirect option
+  copyBtn.addEventListener("click", () => {
+    copyPGNToClipboard(pgn);
+    modal.remove();
+  });
+
+  // Download only option
+  downloadBtn.addEventListener("click", () => {
+    downloadPGNFile(pgn);
+    modal.remove();
+  });
+}
+
+function copyPGNToClipboard(pgn) {
+  navigator.clipboard
+    .writeText(pgn)
+    .then(() => {
+      console.log("PGN copied to clipboard");
+      // Show success message
+      const statusEl = document.getElementById("status");
+      const originalText = statusEl.textContent;
+      statusEl.textContent = "PGN copied to clipboard! Opening ChessKit.org...";
+      setTimeout(() => {
+        statusEl.textContent = originalText;
+      }, 3000);
+
+      // Redirect to chesskit.org
+      setTimeout(() => {
+        window.open("https://chesskit.org/", "_blank");
+      }, 500);
+    })
+    .catch((err) => {
+      console.error("Failed to copy PGN to clipboard:", err);
+      const statusEl = document.getElementById("status");
+      const originalText = statusEl.textContent;
+      statusEl.textContent = "Failed to copy to clipboard. Please try again.";
+      setTimeout(() => {
+        statusEl.textContent = originalText;
+      }, 3000);
+    });
+}
+
+function downloadPGNFile(pgn) {
+  // Create and download PGN file
+  const blob = new Blob([pgn], { type: "application/x-chess-pgn" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `chess-vs-gpt-${new Date().toISOString().split("T")[0]}.pgn`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  // Show success message
+  const statusEl = document.getElementById("status");
+  const originalText = statusEl.textContent;
+  statusEl.textContent = "PGN file downloaded successfully!";
+  setTimeout(() => {
+    statusEl.textContent = originalText;
+  }, 3000);
+}
+
+function showExportButton() {
+  const exportBtn = document.getElementById("exportBtn");
+  if (exportBtn && game.history().length > 0) {
+    exportBtn.style.display = "inline-flex";
+  }
+}
+
+function hideExportButton() {
+  const exportBtn = document.getElementById("exportBtn");
+  if (exportBtn) {
+    exportBtn.style.display = "none";
+  }
+}
