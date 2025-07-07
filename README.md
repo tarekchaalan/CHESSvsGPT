@@ -11,10 +11,29 @@ Play the game online at [chess-vs-gpt.vercel.app](https://chess-vs-gpt.vercel.ap
 - Play chess against different OpenAI models (GPT-4.5, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo)
 - Beautiful and responsive chess interface
 - Game controls (Restart, Undo Move, Flip Board)
+- **Pre-moves**: Queue moves when it's not your turn for faster gameplay
+- **Planning tools**: Right-click to draw arrows, highlight squares, and mark captures
 - Secure API key management
 - Illegal move detection and handling
 - ASCII board representation for AI decision making
 - Responsive design for all device sizes
+
+## How to Use Pre-moves and Planning
+
+### Pre-moves
+
+- When it's the AI's turn, you can drag pieces to make pre-moves
+- Pre-moves are highlighted in red and will execute automatically when your turn arrives
+- You can queue multiple pre-moves - they'll execute in sequence if all are valid
+- If any pre-move becomes invalid, all pre-moves are cancelled
+
+### Planning Tools
+
+- **Right-click on a piece** and drag to another square to draw an arrow
+- **Right-click on an empty square** to highlight it in yellow
+- **Right-click on an occupied square** to mark it with a red capture circle
+- **Left-click on the board** (not on pieces) to clear all planning elements
+- **Press Escape** to clear all planning and cancel arrow drawing
 
 ## Credits
 
