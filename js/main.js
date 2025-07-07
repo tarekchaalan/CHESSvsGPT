@@ -1,6 +1,16 @@
 const game = new Chess();
 let userPlayingForAI = false;
 
+// Pre-move and planning variables
+let premoves = [];
+let isPlanningMode = false;
+let planningArrows = [];
+let planningHighlights = [];
+let planningCaptures = [];
+let isDrawingArrow = false;
+let arrowStart = null;
+let arrowEnd = null;
+
 // Sound effects
 const captureSound = new Audio("sound/capture.mp3");
 const moveSelfSound = new Audio("sound/move-self.mp3");
@@ -12,6 +22,7 @@ const gameEndSound = new Audio("sound/game-end.mp3");
 const gameStartSound = new Audio("sound/game-start.mp3");
 const illegalSound = new Audio("sound/illegal.mp3");
 const notifySound = new Audio("sound/notify.mp3");
+const premoveSound = new Audio("sound/premove.mp3");
 
 // Sound playing functions
 function playSound(audio) {
@@ -53,6 +64,234 @@ function playIllegalSound() {
 
 function playNotifySound() {
   playSound(notifySound);
+}
+
+function playPremoveSound() {
+  playSound(premoveSound);
+}
+
+// Pre-move and planning functions
+function addPremove(from, to) {
+  // Only allow pre-moves when it's not the player's turn
+  if (game.turn() === "w" && !userPlayingForAI) {
+    return false;
+  }
+
+  // Check if the move is valid
+  const tempGame = new Chess(game.fen());
+  const move = tempGame.move({ from, to, promotion: "q" });
+
+  if (!move) {
+    playIllegalSound();
+    return false;
+  }
+
+  // Add to pre-moves array
+  premoves.push({ from, to, promotion: "q" });
+  playPremoveSound();
+
+  // Highlight the pre-move squares
+  highlightPremoveSquares(from, to);
+
+  return true;
+}
+
+function executePremove() {
+  if (premoves.length === 0) return false;
+
+  // Try to execute the first pre-move
+  const premove = premoves[0];
+  const move = game.move(premove);
+
+  if (move) {
+    // Remove the executed pre-move
+    premoves.shift();
+    clearPremoveHighlights();
+
+    // Play sound based on move type
+    if (move.captured) {
+      playCaptureSound();
+    } else if (move.flags && move.flags.includes("k")) {
+      playCastleSound();
+    } else if (move.promotion) {
+      playPromoteSound();
+    } else {
+      playMoveSound(true);
+    }
+
+    board.position(game.fen());
+    updateStatus();
+
+    // If there are more pre-moves and it's still the player's turn, execute them
+    if (premoves.length > 0 && game.turn() === "w" && !userPlayingForAI) {
+      setTimeout(executePremove, 100);
+    } else {
+      // Clear all pre-moves if any failed or it's AI's turn
+      if (premoves.length > 0) {
+        premoves = [];
+        clearPremoveHighlights();
+      }
+
+      // Make AI move if it's AI's turn
+      if (game.turn() === "b" && !userPlayingForAI) {
+        window.setTimeout(makeAIMove, 250);
+      }
+    }
+
+    return true;
+  } else {
+    // Pre-move is no longer valid, clear all pre-moves
+    premoves = [];
+    clearPremoveHighlights();
+    playIllegalSound();
+    return false;
+  }
+}
+
+function clearPremoveHighlights() {
+  // Remove pre-move highlight elements
+  const highlights = document.querySelectorAll(".premove-highlight");
+  highlights.forEach((el) => el.remove());
+}
+
+function highlightPremoveSquares(from, to) {
+  clearPremoveHighlights();
+
+  const boardElement = document.getElementById("board");
+  const squares = boardElement.querySelectorAll(".square-55d63");
+
+  // Find the squares and add highlights
+  squares.forEach((square) => {
+    if (square.dataset.square === from || square.dataset.square === to) {
+      const highlight = document.createElement("div");
+      highlight.className = "premove-highlight";
+      highlight.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 0, 0, 0.3);
+        pointer-events: none;
+        z-index: 10;
+      `;
+      square.style.position = "relative";
+      square.appendChild(highlight);
+    }
+  });
+}
+
+function clearPlanning() {
+  // Remove all planning elements
+  const planningElements = document.querySelectorAll(
+    ".planning-arrow, .planning-highlight, .planning-capture"
+  );
+  planningElements.forEach((el) => el.remove());
+  planningArrows = [];
+  planningHighlights = [];
+  planningCaptures = [];
+}
+
+function addPlanningArrow(from, to) {
+  const boardElement = document.getElementById("board");
+  const fromSquare = boardElement.querySelector(`[data-square="${from}"]`);
+  const toSquare = boardElement.querySelector(`[data-square="${to}"]`);
+
+  if (!fromSquare || !toSquare) return;
+
+  const arrow = document.createElement("div");
+  arrow.className = "planning-arrow";
+  arrow.style.cssText = `
+    position: absolute;
+    pointer-events: none;
+    z-index: 20;
+  `;
+
+  // Calculate arrow position and rotation
+  const fromRect = fromSquare.getBoundingClientRect();
+  const toRect = toSquare.getBoundingClientRect();
+  const boardRect = boardElement.getBoundingClientRect();
+
+  const fromCenter = {
+    x: fromRect.left + fromRect.width / 2 - boardRect.left,
+    y: fromRect.top + fromRect.height / 2 - boardRect.top,
+  };
+
+  const toCenter = {
+    x: toRect.left + toRect.width / 2 - boardRect.left,
+    y: toRect.top + toRect.height / 2 - boardRect.top,
+  };
+
+  const angle = Math.atan2(
+    toCenter.y - fromCenter.y,
+    toCenter.x - fromCenter.x
+  );
+  const distance = Math.sqrt(
+    Math.pow(toCenter.x - fromCenter.x, 2) +
+      Math.pow(toCenter.y - fromCenter.y, 2)
+  );
+
+  arrow.style.left = `${fromCenter.x}px`;
+  arrow.style.top = `${fromCenter.y}px`;
+  arrow.style.width = `${distance}px`;
+  arrow.style.height = "3px";
+  arrow.style.background =
+    "linear-gradient(to right, rgba(255, 255, 0, 0.8), rgba(255, 255, 0, 0.4))";
+  arrow.style.transform = `rotate(${angle}rad)`;
+  arrow.style.transformOrigin = "0 50%";
+
+  boardElement.appendChild(arrow);
+  planningArrows.push({ from, to, element: arrow });
+}
+
+function addPlanningHighlight(square) {
+  const boardElement = document.getElementById("board");
+  const squareElement = boardElement.querySelector(`[data-square="${square}"]`);
+
+  if (!squareElement) return;
+
+  const highlight = document.createElement("div");
+  highlight.className = "planning-highlight";
+  highlight.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 0, 0.3);
+    pointer-events: none;
+    z-index: 15;
+  `;
+
+  squareElement.style.position = "relative";
+  squareElement.appendChild(highlight);
+  planningHighlights.push({ square, element: highlight });
+}
+
+function addPlanningCapture(square) {
+  const boardElement = document.getElementById("board");
+  const squareElement = boardElement.querySelector(`[data-square="${square}"]`);
+
+  if (!squareElement) return;
+
+  const capture = document.createElement("div");
+  capture.className = "planning-capture";
+  capture.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 80%;
+    height: 80%;
+    border: 3px solid rgba(255, 0, 0, 0.8);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 15;
+  `;
+
+  squareElement.style.position = "relative";
+  squareElement.appendChild(capture);
+  planningCaptures.push({ square, element: capture });
 }
 
 // API Key Modal Management
@@ -177,12 +416,26 @@ function onDrop(source, target) {
     window.userHasInteracted = true;
   }
 
+  // Check if it's a pre-move (not player's turn)
+  if (game.turn() === "b" && !userPlayingForAI) {
+    return addPremove(source, target) ? "snapback" : "snapback";
+  }
+
   const move = game.move({ from: source, to: target, promotion: "q" });
 
   if (!move) {
     playIllegalSound();
     return "snapback";
   }
+
+  // Clear any existing pre-moves since we made a real move
+  if (premoves.length > 0) {
+    premoves = [];
+    clearPremoveHighlights();
+  }
+
+  // Clear planning when a move is made
+  clearPlanningOnGameChange();
 
   // Play sound based on move type
   if (move.captured) {
@@ -314,6 +567,14 @@ async function makeAIMove() {
 
     board.position(game.fen());
     updateStatus();
+
+    // Clear planning when AI moves
+    clearPlanningOnGameChange();
+
+    // Execute pre-moves if any exist
+    if (premoves.length > 0 && game.turn() === "w" && !userPlayingForAI) {
+      setTimeout(executePremove, 100);
+    }
   } catch (error) {
     const statusEl = document.getElementById("status");
     if (error.message.includes("API key")) {
@@ -332,6 +593,101 @@ board = Chessboard("board", {
   onDrop,
   onSnapEnd,
   pieceTheme: "img/chesspieces/{piece}.png",
+});
+
+// Prevent default context menu on the entire board and all children
+const boardElement = document.getElementById("board");
+boardElement.addEventListener(
+  "contextmenu",
+  function (e) {
+    e.preventDefault();
+    return false;
+  },
+  true
+); // Use capture phase to catch all
+
+// Add right-click planning functionality
+boardElement.addEventListener("mousedown", function (e) {
+  if (e.button === 2) {
+    e.preventDefault();
+
+    const square = e.target.closest(".square-55d63");
+    if (!square) return;
+    const squareName = square.dataset.square;
+    if (!squareName) return;
+    const piece = square.querySelector("img");
+
+    if (piece) {
+      // Right-click on a piece - start drawing arrow
+      if (!isDrawingArrow) {
+        isDrawingArrow = true;
+        arrowStart = squareName;
+        square.classList.add("drawing-arrow");
+      } else {
+        // Complete the arrow
+        if (arrowStart !== squareName) {
+          togglePlanningArrow(arrowStart, squareName);
+        }
+        isDrawingArrow = false;
+        arrowStart = null;
+        // Remove drawing feedback from all squares
+        document
+          .querySelectorAll(".square-55d63.drawing-arrow")
+          .forEach((sq) => {
+            sq.classList.remove("drawing-arrow");
+          });
+      }
+    } else {
+      // Right-click on empty square - toggle highlight
+      togglePlanningHighlight(squareName);
+    }
+    // Also toggle capture circle if clicking on an occupied square
+    if (piece) {
+      togglePlanningCapture(squareName);
+    }
+  }
+});
+
+// Handle mouse move for arrow drawing
+document.getElementById("board").addEventListener("mousemove", function (e) {
+  if (isDrawingArrow && arrowStart) {
+    // Update arrow preview (optional - could add visual feedback)
+  }
+});
+
+// Clear planning on left click (except for dragging)
+document.getElementById("board").addEventListener("click", function (e) {
+  if (e.button === 0 && !e.target.closest(".square-55d63 img")) {
+    // Left click on board (not on a piece) - clear planning
+    clearPlanning();
+    isDrawingArrow = false;
+    arrowStart = null;
+  }
+});
+
+// Clear planning when game state changes
+function clearPlanningOnGameChange() {
+  clearPlanning();
+  isDrawingArrow = false;
+  arrowStart = null;
+  // Remove drawing feedback from all squares
+  document.querySelectorAll(".square-55d63.drawing-arrow").forEach((sq) => {
+    sq.classList.remove("drawing-arrow");
+  });
+}
+
+// Add keyboard shortcuts
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") {
+    // Clear planning and cancel arrow drawing
+    clearPlanning();
+    isDrawingArrow = false;
+    arrowStart = null;
+    // Remove drawing feedback from all squares
+    document.querySelectorAll(".square-55d63.drawing-arrow").forEach((sq) => {
+      sq.classList.remove("drawing-arrow");
+    });
+  }
 });
 
 // Force board to resize after initialization
@@ -353,6 +709,14 @@ function restartGame() {
   game.reset();
   board.position("start");
   userPlayingForAI = false;
+
+  // Clear pre-moves and planning
+  premoves = [];
+  clearPremoveHighlights();
+  clearPlanning();
+  isDrawingArrow = false;
+  arrowStart = null;
+
   playGameStartSound(); // Play game start sound
   updateStatus();
   hideExportButton(); // Hide export button when starting new game
@@ -451,9 +815,14 @@ function generatePGN() {
 
 function getModelDisplayName(model) {
   const modelNames = {
+    "o3-2025-04-16": "O3",
     "gpt-4-0125-preview": "GPT-4.5",
     "gpt-4-1106-preview": "GPT-4 Turbo",
     "gpt-4": "GPT-4",
+    "gpt-4o": "GPT-4o",
+    "o4-mini-2025-04-16": "O4-Mini",
+    "gpt-4o-mini": "GPT-4o Mini",
+    "o3-mini-2025-01-31": "O3-Mini",
     "gpt-3.5-turbo": "GPT-3.5 Turbo",
   };
   return modelNames[model] || model;
@@ -605,3 +974,249 @@ function hideExportButton() {
     exportBtn.style.display = "none";
   }
 }
+
+// --- Planning Overlay Setup ---
+function ensurePlanningOverlay() {
+  let overlay = document.getElementById("planning-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "planning-overlay";
+    overlay.style.position = "absolute";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.pointerEvents = "none";
+    overlay.style.zIndex = "30";
+    document.getElementById("board").appendChild(overlay);
+  }
+  return overlay;
+}
+
+function getBoardRect() {
+  return document.getElementById("board").getBoundingClientRect();
+}
+
+function redrawPlanning() {
+  // Remove all overlays
+  const overlay = ensurePlanningOverlay();
+  overlay.innerHTML = "";
+
+  // Draw arrows
+  planningArrows.forEach(({ from, to }) => {
+    drawArrow(from, to, overlay);
+  });
+
+  // Draw highlights
+  planningHighlights.forEach((square) => {
+    drawHighlight(square);
+  });
+
+  // Draw captures
+  planningCaptures.forEach((square) => {
+    drawCapture(square);
+  });
+}
+
+function drawArrow(from, to, overlay) {
+  const board = document.getElementById("board");
+  const fromSquare = board.querySelector(`[data-square="${from}"]`);
+  const toSquare = board.querySelector(`[data-square="${to}"]`);
+  if (!fromSquare || !toSquare) return;
+  const boardRect = getBoardRect();
+  const fromRect = fromSquare.getBoundingClientRect();
+  const toRect = toSquare.getBoundingClientRect();
+  const fromCenter = {
+    x: fromRect.left + fromRect.width / 2 - boardRect.left,
+    y: fromRect.top + fromRect.height / 2 - boardRect.top,
+  };
+  const toCenter = {
+    x: toRect.left + toRect.width / 2 - boardRect.left,
+    y: toRect.top + toRect.height / 2 - boardRect.top,
+  };
+  const dx = toCenter.x - fromCenter.x;
+  const dy = toCenter.y - fromCenter.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  if (length < 10) return; // Don't draw tiny arrows
+
+  // Arrow style
+  const color = "#FFA500"; // bright orange
+  const thickness = 10;
+  const headLength = 28;
+  const headWidth = 22;
+
+  // Shorten the line so the arrowhead doesn't overlap the target square
+  const shorten = headLength * 0.7;
+  const tx = toCenter.x - (dx / length) * shorten;
+  const ty = toCenter.y - (dy / length) * shorten;
+
+  // SVG container
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "planning-arrow");
+  svg.style.position = "absolute";
+  svg.style.left = "0";
+  svg.style.top = "0";
+  svg.style.width = "100%";
+  svg.style.height = "100%";
+  svg.style.overflow = "visible";
+  svg.style.pointerEvents = "none";
+  svg.style.zIndex = "30";
+
+  // Draw the line
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", fromCenter.x);
+  line.setAttribute("y1", fromCenter.y);
+  line.setAttribute("x2", tx);
+  line.setAttribute("y2", ty);
+  line.setAttribute("stroke", color);
+  line.setAttribute("stroke-width", thickness);
+  line.setAttribute("stroke-linecap", "round");
+  svg.appendChild(line);
+
+  // Draw the arrowhead
+  const angle = Math.atan2(dy, dx);
+  const arrowTip = { x: toCenter.x, y: toCenter.y };
+  const left = {
+    x:
+      arrowTip.x -
+      headLength * Math.cos(angle) +
+      (headWidth / 2) * Math.sin(angle),
+    y:
+      arrowTip.y -
+      headLength * Math.sin(angle) -
+      (headWidth / 2) * Math.cos(angle),
+  };
+  const right = {
+    x:
+      arrowTip.x -
+      headLength * Math.cos(angle) -
+      (headWidth / 2) * Math.sin(angle),
+    y:
+      arrowTip.y -
+      headLength * Math.sin(angle) +
+      (headWidth / 2) * Math.cos(angle),
+  };
+  const arrowHead = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "polygon"
+  );
+  arrowHead.setAttribute(
+    "points",
+    `
+    ${arrowTip.x},${arrowTip.y}
+    ${left.x},${left.y}
+    ${right.x},${right.y}
+  `
+  );
+  arrowHead.setAttribute("fill", color);
+  svg.appendChild(arrowHead);
+
+  overlay.appendChild(svg);
+}
+
+function drawHighlight(square) {
+  const board = document.getElementById("board");
+  const squareElement = board.querySelector(`[data-square="${square}"]`);
+  if (!squareElement) return;
+  // Remove existing highlight
+  const old = squareElement.querySelector(".planning-highlight");
+  if (old) old.remove();
+  const highlight = document.createElement("div");
+  highlight.className = "planning-highlight";
+  highlight.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 0, 0.3);
+    pointer-events: none;
+    z-index: 15;
+  `;
+  squareElement.style.position = "relative";
+  squareElement.appendChild(highlight);
+}
+
+function drawCapture(square) {
+  const board = document.getElementById("board");
+  const squareElement = board.querySelector(`[data-square="${square}"]`);
+  if (!squareElement) return;
+  // Remove existing capture
+  const old = squareElement.querySelector(".planning-capture");
+  if (old) old.remove();
+  const capture = document.createElement("div");
+  capture.className = "planning-capture";
+  capture.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 80%;
+    height: 80%;
+    border: 3px solid rgba(255, 0, 0, 0.8);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 15;
+  `;
+  squareElement.style.position = "relative";
+  squareElement.appendChild(capture);
+}
+
+function togglePlanningArrow(from, to) {
+  const idx = planningArrows.findIndex((a) => a.from === from && a.to === to);
+  if (idx !== -1) {
+    planningArrows.splice(idx, 1);
+  } else {
+    planningArrows.push({ from, to });
+  }
+  redrawPlanning();
+}
+
+function togglePlanningHighlight(square) {
+  const idx = planningHighlights.indexOf(square);
+  if (idx !== -1) {
+    planningHighlights.splice(idx, 1);
+  } else {
+    planningHighlights.push(square);
+  }
+  redrawPlanning();
+}
+
+function togglePlanningCapture(square) {
+  const idx = planningCaptures.indexOf(square);
+  if (idx !== -1) {
+    planningCaptures.splice(idx, 1);
+  } else {
+    planningCaptures.push(square);
+  }
+  redrawPlanning();
+}
+
+function clearPlanning() {
+  planningArrows = [];
+  planningHighlights = [];
+  planningCaptures = [];
+  redrawPlanning();
+}
+
+// Redraw planning overlays after every move, resize, and board update
+function afterBoardUpdate() {
+  redrawPlanning();
+}
+
+// Patch into board update points
+const origOnSnapEnd = onSnapEnd;
+onSnapEnd = function () {
+  if (origOnSnapEnd) origOnSnapEnd();
+  afterBoardUpdate();
+};
+
+const origUpdateStatus = updateStatus;
+updateStatus = function () {
+  if (origUpdateStatus) origUpdateStatus();
+  afterBoardUpdate();
+};
+
+window.addEventListener("resize", afterBoardUpdate);
+
+document.addEventListener("DOMContentLoaded", afterBoardUpdate);

@@ -263,32 +263,114 @@ async function getAIMove(fen, customPrompt = null) {
   const userPrompt = `Make your move as Black.`;
 
   // Log the prompts
-  // console.log("=== AI Move Prompt ===");
-  // console.log("System Prompt:", systemPrompt);
-  // console.log("User Prompt:", userPrompt);
-  // console.log("Model:", model);
-  // console.log("====================");
+  console.log("=== AI Move Prompt ===");
+  console.log("System Prompt:", systemPrompt);
+  console.log("User Prompt:", userPrompt);
+  console.log("Model:", model);
+  console.log("====================");
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    let response;
+    let data;
+
+    // Try chat completions first for all models
+    console.log("Trying chat completions endpoint first...");
+
+    // Prepare request body based on model-specific requirements
+    const chatRequestBody = {
+      model: model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+
+    // Handle temperature based on model requirements
+    if (model === "o3") {
+      // O3 only supports default temperature (1), so don't specify it
+    } else if (model === "o4-mini") {
+      // O4-mini only supports default temperature (1), so don't specify it
+    } else if (model === "o3-mini") {
+      // O3-mini doesn't support temperature at all
+    } else {
+      // For other chat models, use temperature 0.2
+      chatRequestBody.temperature = 0.2;
+    }
+
+    console.log("Chat completions request body:", chatRequestBody);
+
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.2,
-      }),
+      body: JSON.stringify(chatRequestBody),
     });
 
-    const data = await response.json();
+    data = await response.json();
 
-    // Check for API key errors
+    // If chat completions works, return the result
+    if (!data.error) {
+      return data.choices[0].message.content.trim();
+    }
+
+    // If we get a "not a chat model" error, try completions endpoint
+    if (
+      data.error &&
+      data.error.message &&
+      data.error.message.includes("not a chat model")
+    ) {
+      console.log("Chat model failed, trying completions endpoint...");
+
+      const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+      // Prepare request body based on model-specific requirements
+      const completionRequestBody = {
+        model: model,
+        prompt: fullPrompt,
+        max_tokens: 50,
+      };
+
+      // Handle temperature based on model requirements
+      if (model === "o3") {
+        // O3 only supports default temperature (1), so don't specify it
+      } else if (model === "o4-mini") {
+        // O4-mini only supports default temperature (1), so don't specify it
+      } else if (model === "o3-mini") {
+        // O3-mini doesn't support temperature at all
+      } else {
+        // For other completion models (like o3-pro), use temperature 0.2
+        completionRequestBody.temperature = 0.2;
+      }
+
+      console.log("Completions request body:", completionRequestBody);
+
+      response = await fetch("https://api.openai.com/v1/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(completionRequestBody),
+      });
+
+      data = await response.json();
+
+      // Check for API key errors
+      if (data.error) {
+        if (data.error.code === "invalid_api_key") {
+          throw new Error(
+            "Invalid API key. Please check your key and try again."
+          );
+        }
+        throw new Error(data.error.message || "OpenAI API error");
+      }
+
+      return data.choices[0].text.trim();
+    }
+
+    // If we get here, there was an error with chat completions that wasn't about model type
     if (data.error) {
       if (data.error.code === "invalid_api_key") {
         throw new Error(

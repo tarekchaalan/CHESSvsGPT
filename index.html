@@ -54,16 +54,37 @@
         <div class="model-selector">
           <label for="modelSelect">Select AI Model:</label>
           <select id="modelSelect" class="model-select">
-            <option value="gpt-4-0125-preview">
-              GPT-4.5 [Most advanced, best at complex strategy]
-            </option>
-            <option value="gpt-4-1106-preview">
-              GPT-4 Turbo [Very capable, faster than GPT-4]
-            </option>
-            <option value="gpt-4">GPT-4 [Strong performance, reliable]</option>
-            <option value="gpt-3.5-turbo">
-              GPT-3.5 Turbo [Basic chess understanding]
-            </option>
+            <optgroup label="Reasoning Models">
+              <option value="o3">O3 [Advanced multi-step reasoning]</option>
+              <option value="o4-mini">
+                O4-Mini [Fast, affordable reasoning]
+              </option>
+              <option value="o3-mini">O3-Mini [Compact reasoning model]</option>
+            </optgroup>
+            <optgroup label="Flagship Chat Models">
+              <option value="gpt-4-0125-preview">
+                GPT-4.5 [Most advanced, best at complex strategy]
+              </option>
+              <option value="gpt-4-1106-preview">
+                GPT-4 Turbo [Very capable, faster than GPT-4]
+              </option>
+              <option value="gpt-4">
+                GPT-4 [Strong performance, reliable]
+              </option>
+              <option value="gpt-4o">
+                GPT-4o [Fast, flexible, real-time capable]
+              </option>
+            </optgroup>
+            <optgroup label="Cost-Optimized Models">
+              <option value="gpt-4o-mini">
+                GPT-4o Mini [Fast, affordable, solid understanding]
+              </option>
+            </optgroup>
+            <optgroup label="Legacy Models">
+              <option value="gpt-3.5-turbo">
+                GPT-3.5 Turbo [Basic chess understanding]
+              </option>
+            </optgroup>
           </select>
         </div>
         <div class="storage-selector">
