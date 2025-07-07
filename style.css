@@ -30,6 +30,7 @@ body {
 
 .square-55d63 {
   touch-action: none !important;
+  position: relative !important;
 }
 
 #status {
@@ -429,4 +430,63 @@ h1 {
   user-select: none;
   -webkit-touch-callout: none;
   touch-action: none;
+}
+
+/* Pre-move and planning styles */
+.premove-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.planning-arrow {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 0, 0.8),
+    rgba(255, 255, 0, 0.4)
+  );
+  height: 3px;
+  transform-origin: 0 50%;
+}
+
+.planning-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 0, 0.3);
+  pointer-events: none;
+  z-index: 15;
+}
+
+.planning-capture {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80%;
+  height: 80%;
+  border: 3px solid rgba(255, 0, 0, 0.8);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 15;
+}
+
+/* Arrow drawing feedback */
+.square-55d63.drawing-arrow {
+  background-color: rgba(255, 255, 0, 0.2) !important;
+}
+
+/* Ensure squares can contain positioned elements */
+.square-55d63 {
+  position: relative !important;
 }
