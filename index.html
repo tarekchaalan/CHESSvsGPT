@@ -7,12 +7,24 @@
     <link rel="icon" href="favicon.svg" />
     <link rel="stylesheet" href="css/chessboard-1.0.0.min.css" />
     <link rel="stylesheet" href="style.css" />
+
+  <style>
+    .pricing-and-stats{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+    .pricing-and-stats .pricing-box,.pricing-and-stats .stats-box{background:#0e1524; color:#cdd7f3; border:1px solid #26385a; border-radius:8px; padding:10px; flex:1; min-width:260px}
+    .pricing-and-stats .muted{display:block;opacity:0.7;margin-top:4px}
+    .hud-toggle{display:block;margin-top:8px;font-size:0.9em}
+    .cost-hud{position:fixed;right:12px;bottom:12px;background:#0e1524;color:#cdd7f3;border:1px solid #26385a;border-radius:10px;padding:8px 12px;font-size:0.9em;box-shadow:0 4px 16px rgba(0,0,0,0.4);z-index:9999}
+    .cost-hud.hidden{display:none}
+    .model-selector{margin-top:10px}
+    .model-select{width:100%}
+  </style>
   </head>
   <body>
     <h1>Chess vs GPT</h1>
     <div id="board"></div>
     <div id="status"></div>
     <button id="apiKeyBtn" class="btn">Manage API Key</button>
+    <div id="costHud" class="cost-hud hidden">Last move: — / — → $0.000000 | Total: $0.000000</div>
 
     <!-- API Key Modal -->
     <div id="apiKeyModal" class="modal">
@@ -20,7 +32,7 @@
         <span class="close">&times;</span>
         <h2>OpenAI API Key</h2>
         <p>
-          To play against GPT-4, you'll need your own OpenAI API key. This key
+          To play against OpenAI models, you'll need your own API key. This key
           is encrypted and stored only in your browser - we never see or store
           it on our servers.
         </p>
@@ -31,19 +43,12 @@
               Your API key is encrypted and stored locally in your browser
             </li>
             <li>Only use this on trusted devices and secure networks</li>
-            <li>We recommend creating a dedicated API key with usage limits</li>
-            <li>You can choose to clear the key when you close your browser</li>
+            <li>We never send your key to any server other than OpenAI</li>
           </ul>
         </div>
-        <form onsubmit="return false;">
-          <input
-            type="text"
-            id="usernameField"
-            name="username"
-            autocomplete="username"
-            style="display: none"
-            aria-hidden="true"
-          />
+
+        <form id="apiKeyForm">
+          <label for="apiKeyInput">OpenAI API Key:</label>
           <input
             type="password"
             id="apiKeyInput"
@@ -51,42 +56,38 @@
             autocomplete="new-password"
           />
         </form>
+
         <div class="model-selector">
           <label for="modelSelect">Select AI Model:</label>
           <select id="modelSelect" class="model-select">
-            <optgroup label="Reasoning Models">
-              <option value="o3">O3 [Advanced multi-step reasoning]</option>
-              <option value="o4-mini">
-                O4-Mini [Fast, affordable reasoning]
-              </option>
-              <option value="o3-mini">O3-Mini [Compact reasoning model]</option>
+            <optgroup label="Frontier (recommended)">
+              <option value="gpt-5">GPT-5 — best for coding/agents</option>
+              <option value="gpt-5-mini">GPT-5 mini — fast, cheap</option>
+              <option value="gpt-5-nano">GPT-5 nano — ultra cheap</option>
             </optgroup>
-            <optgroup label="Flagship Chat Models">
-              <option value="gpt-4-0125-preview">
-                GPT-4.5 [Most advanced, best at complex strategy]
-              </option>
-              <option value="gpt-4-1106-preview">
-                GPT-4 Turbo [Very capable, faster than GPT-4]
-              </option>
-              <option value="gpt-4">
-                GPT-4 [Strong performance, reliable]
-              </option>
-              <option value="gpt-4o">
-                GPT-4o [Fast, flexible, real-time capable]
-              </option>
-            </optgroup>
-            <optgroup label="Cost-Optimized Models">
-              <option value="gpt-4o-mini">
-                GPT-4o Mini [Fast, affordable, solid understanding]
-              </option>
-            </optgroup>
-            <optgroup label="Legacy Models">
-              <option value="gpt-3.5-turbo">
-                GPT-3.5 Turbo [Basic chess understanding]
-              </option>
+            <optgroup label="Stable & fast">
+              <option value="gpt-4o">GPT-4o — balanced performance</option>
+              <option value="gpt-4o-mini">GPT-4o mini — budget</option>
             </optgroup>
           </select>
         </div>
+
+        <div class="pricing-and-stats">
+          <div class="pricing-box">
+            <strong>Pricing (per 1M tokens):</strong>
+            <div id="pricingInfo">Input —, Output —</div>
+            <small id="pricingSource" class="muted"></small>
+          </div>
+          <div class="stats-box">
+            <strong>Cost tracker:</strong>
+            <div id="moveCostInfo">Last move: — in / — out → $0.000000 | Game total: $0.000000</div>
+            <label class="hud-toggle">
+              <input type="checkbox" id="showHudToggle" />
+              Show floating cost HUD during the game
+            </label>
+          </div>
+        </div>
+
         <div class="storage-selector">
           <label>
             <input type="checkbox" id="persistentStorage" />
@@ -116,29 +117,6 @@
           (window.vaq = window.vaq || []).push(arguments);
         };
     </script>
-    <script
-      defer
-      src="/_vercel/insights/script.js"
-      onerror="console.log('Analytics blocked by client')"
-    ></script>
-
-    <footer class="social-links">
-      <a
-        href="https://github.com/tarekchaalan/CHESSvsGPT"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="GitHub Repository"
-      >
-        <img src="img/github.svg" alt="GitHub" class="social-icon" />
-      </a>
-      <a
-        href="https://tarekchaalan.com"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Portfolio Website"
-      >
-        <img src="img/portfolio.svg" alt="Portfolio" class="social-icon" />
-      </a>
-    </footer>
+    <script defer src="/_vercel/insights/script.js"></script>
   </body>
 </html>
