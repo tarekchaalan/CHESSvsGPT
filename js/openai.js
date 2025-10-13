@@ -379,16 +379,16 @@ function extractMessageText(message) {
   const content = message.content;
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    // Newer models may return an array of content parts; concat any text-like parts
-    return content
-      .map(part => {
-        if (!part) return "";
-        if (typeof part === "string") return part;
-        if (typeof part.text === "string") return part.text;
-        if (typeof part.content === "string") return part.content;
-        return "";
-      })
-      .join("");
+    const grab = (p) => {
+      if (!p) return "";
+      if (typeof p === "string") return p;
+      if (typeof p.text === "string") return p.text;
+      if (Array.isArray(p.text)) return p.text.map(grab).join("");
+      if (typeof p.content === "string") return p.content;
+      if (Array.isArray(p.content)) return p.content.map(grab).join("");
+      return "";
+    };
+    return content.map(grab).join("");
   }
   return "";
 }
@@ -427,7 +427,8 @@ async function getAIMove(fen, customPrompt = null) {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_completion_tokens: 30,
+        max_tokens: 30,
+        temperature: 0,
       };
 
       response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -463,7 +464,8 @@ async function getAIMove(fen, customPrompt = null) {
           const retryBody = {
             model,
             messages: [ { role: "user", content: simplifiedPrompt } ],
-            max_completion_tokens: 30,
+            max_tokens: 30,
+            temperature: 0,
           };
           const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
@@ -481,7 +483,7 @@ async function getAIMove(fen, customPrompt = null) {
         }
         return text;
       } catch (e) { /* no-op */ }
-      return data.choices[0]?.message?.content?.trim?.() || "";
+      return extractMessageText(data.choices?.[0]?.message).trim();
     } else {
       // For other models, try chat completions first, then fall back to completions
       const chatRequestBody = {
