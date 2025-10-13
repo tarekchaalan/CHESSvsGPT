@@ -427,7 +427,7 @@ async function getAIMove(fen, customPrompt = null) {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: 30,
+        max_completion_tokens: 30,
         temperature: 0,
       };
 
@@ -464,7 +464,7 @@ async function getAIMove(fen, customPrompt = null) {
           const retryBody = {
             model,
             messages: [ { role: "user", content: simplifiedPrompt } ],
-            max_tokens: 30,
+            max_completion_tokens: 30,
             temperature: 0,
           };
           const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -493,7 +493,7 @@ async function getAIMove(fen, customPrompt = null) {
           { role: "user", content: userPrompt },
         ],
         temperature: 0.2,
-        max_tokens: 30,
+        max_completion_tokens: 30,
       };
 
       response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -531,7 +531,7 @@ async function getAIMove(fen, customPrompt = null) {
         const completionRequestBody = {
           model: model,
           prompt: fullPrompt,
-          max_tokens: 50,
+          max_completion_tokens: 50,
         };
 
         // Models that ignore temperature—leave unset
