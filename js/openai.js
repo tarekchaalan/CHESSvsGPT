@@ -428,7 +428,7 @@ async function getAIMove(fen, customPrompt = null) {
           { role: "user", content: userPrompt },
         ],
         max_completion_tokens: 30,
-        temperature: 0,
+        temperature: 1,
       };
 
       response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -465,7 +465,7 @@ async function getAIMove(fen, customPrompt = null) {
             model,
             messages: [ { role: "user", content: simplifiedPrompt } ],
             max_completion_tokens: 30,
-            temperature: 0,
+            temperature: 1,
           };
           const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
@@ -492,7 +492,7 @@ async function getAIMove(fen, customPrompt = null) {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.2,
+        temperature: 1,
         max_completion_tokens: 30,
       };
 
