@@ -70,6 +70,31 @@ async function decryptKey(encoded) {
   }
 }
 
+// === Compatibility helpers for modal ===
+function sanitizeApiKey(k) {
+  if (!k) return "";
+  return String(k).trim().replace(/^["']+|["']+$/g, "");
+}
+
+function isValidApiKey(k) {
+  if (!k) return false;
+  const cleaned = sanitizeApiKey(k);
+  // Accept sk-, sk-proj-, sk-org- and allow base64url-safe chars (A–Z a–z 0–9 _ -), len >= 16 after prefix
+  const prefixRe = /^(sk|sk-proj|sk-org)-/;
+  if (!prefixRe.test(cleaned)) return false;
+  const rest = cleaned.replace(prefixRe, "");
+  if (rest.length < 16) return false;
+  return /^[A-Za-z0-9_-]+$/.test(rest);
+}
+
+async function setStoredApiKey(key) {
+  const cleaned = sanitizeApiKey(key);
+  if (!isValidApiKey(cleaned)) throw new Error("Invalid API key format");
+  const persistent = localStorage.getItem("use_persistent_storage") === "true";
+  await storeApiKey(cleaned, persistent);
+  return true;
+}
+
 async function storeApiKey(key, persistent = false) {
   const encrypted = await encryptKey(key);
   if (persistent) {
@@ -82,17 +107,66 @@ async function storeApiKey(key, persistent = false) {
 }
 
 async function getStoredApiKey() {
-  const persistent = localStorage.getItem("use_persistent_storage") === "true";
-  const cipher = persistent
-    ? localStorage.getItem("openai_api_key")
-    : sessionStorage.getItem("openai_api_key");
-  if (!cipher) return null;
-  return await decryptKey(cipher);
+  // Try preferred location based on the "use_persistent_storage" flag
+  const preferPersistent = localStorage.getItem("use_persistent_storage") === "true";
+
+  const tryRead = async (storage, key) => {
+    const val = storage.getItem(key);
+    if (!val) return null;
+    // Try decrypting; if decryption fails and it already looks like an API key, return as-is
+    try {
+      const dec = await decryptKey(val);
+      if (dec && isValidApiKey(dec)) return dec;
+      if (isValidApiKey(val)) return val;
+      return dec;
+    } catch (_) {
+      if (isValidApiKey(val)) return val;
+      return null;
+    }
+  };
+
+  // 1) Preferred storage
+  const primary = preferPersistent
+    ? await tryRead(localStorage, "openai_api_key")
+    : await tryRead(sessionStorage, "openai_api_key");
+  if (primary) return primary;
+
+  // 2) Fallback to the other storage
+  const secondary = preferPersistent
+    ? await tryRead(sessionStorage, "openai_api_key")
+    : await tryRead(localStorage, "openai_api_key");
+  if (secondary) return secondary;
+
+  // 3) Legacy keys or plain storage fallbacks
+  const legacyCandidates = [
+    ["local", "apiKey"],
+    ["local", "openai_api_key_plain"],
+    ["session", "apiKey"],
+    ["session", "openai_api_key_plain"]
+  ];
+
+  for (const [where, key] of legacyCandidates) {
+    const storage = where === "local" ? localStorage : sessionStorage;
+    const val = storage.getItem(key);
+    if (val && isValidApiKey(val)) {
+      await storeApiKey(val, preferPersistent);
+      try { storage.removeItem(key); } catch {}
+      return val;
+    }
+  }
+
+  return null;
 }
 
 function removeStoredApiKey() {
-  localStorage.removeItem("openai_api_key");
-  sessionStorage.removeItem("openai_api_key");
+  try { localStorage.removeItem("openai_api_key"); } catch {}
+  try { sessionStorage.removeItem("openai_api_key"); } catch {}
+  try { localStorage.removeItem("use_persistent_storage"); } catch {}
+  // Legacy cleanups
+  try { localStorage.removeItem("apiKey"); } catch {}
+  try { sessionStorage.removeItem("apiKey"); } catch {}
+  try { localStorage.removeItem("openai_api_key_plain"); } catch {}
+  try { sessionStorage.removeItem("openai_api_key_plain"); } catch {}
 }
 
 // === Helper: Build ASCII board of current position ===
@@ -117,16 +191,12 @@ function getASCIIBoard(fen) {
     ascii += `${8 - i}\n`;
   }
 
-  // Add column labels again
   ascii += "  a b c d e f g h\n";
   return ascii;
 }
 
 // === Model Pricing (USD per 1M tokens) ===
-// Sources: Official OpenAI pricing pages.
-// GPT-5 family: https://openai.com/api/pricing/ and https://openai.com/gpt-5
-// GPT-4o: https://platform.openai.com/docs/models/gpt-4o
-// GPT-4o mini (text): https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/
+// GPT-5 family & 4o family (values shown in modal)
 const MODEL_PRICING = {
   "gpt-5":        { inputPerM: 1.25, outputPerM: 10.0, source: "https://openai.com/api/pricing/" },
   "gpt-5-mini":   { inputPerM: 0.25, outputPerM: 2.0,  source: "https://openai.com/api/pricing/" },
@@ -196,20 +266,16 @@ function recordMoveUsage(model, promptTokens, completionTokens) {
 
 // Initialize UI bindings once DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
-  // Model select -> pricing display
   const modelSel = document.getElementById("modelSelect");
   if (modelSel) {
-    // Initialize from existing value or localStorage
     const current = (localStorage.getItem("openai_model") || modelSel.value || "gpt-5");
     updatePricingUIForModel(current);
     modelSel.addEventListener("change", () => {
       const m = modelSel.value;
       updatePricingUIForModel(m);
-      // Save immediately so PGN and next call use it
       try { localStorage.setItem("openai_model", m); } catch {}
     });
   }
-  // HUD toggle
   const hudToggle = document.getElementById("showHudToggle");
   const hud = document.getElementById("costHud");
   if (hudToggle && hud) {
@@ -297,7 +363,6 @@ async function getAIMove(fen, customPrompt = null) {
   const systemPrompt = customPrompt || getGameStatePrompt(fen);
   const userPrompt = `Make your move as Black.`;
 
-  // Log the prompts
   console.log("=== AI Move Prompt ===");
   console.log("System Prompt:", systemPrompt);
   console.log("User Prompt:", userPrompt);
@@ -308,78 +373,27 @@ async function getAIMove(fen, customPrompt = null) {
     let response;
     let data;
 
-    // Try chat completions first for all models
-    const chatRequestBody = {
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 30,
-    };
+    // GPT-5 models are always chat models, so use chat completions for them
+    const isGPT5Model = model.startsWith('gpt-5');
 
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(chatRequestBody),
-    });
-
-    data = await response.json();
-
-    // If chat completions works, return the result
-    if (!data.error) {
-      try {
-        const usage = data.usage || {};
-        const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
-        const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.message?.content || "");
-        recordMoveUsage(model, pt, ct);
-      } catch (e) { /* no-op */ }
-      return data.choices[0].message.content.trim();
-    }
-
-    // If model isn't a chat model, fall back to text completions
-    // Detect based on specific error message or code
-    if (
-      data.error &&
-      (data.error.type === "invalid_request_error" ||
-        /not supported in the v1\/chat\/completions endpoint/i.test(
-          data.error.message || ""
-        ))
-    ) {
-      const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-
-      // Prepare request body based on model-specific requirements
-      const completionRequestBody = {
-        model: model,
-        prompt: fullPrompt,
-        max_tokens: 50,
+    if (isGPT5Model) {
+      // For GPT-5 models, only use chat completions
+      const chatRequestBody = {
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_completion_tokens: 30,
       };
 
-      // Handle temperature based on model requirements
-      if (model === "o3") {
-        // O3 only supports default temperature (1), so don't specify it
-      } else if (model === "o4-mini") {
-        // O4-mini only supports default temperature (1), so don't specify it
-      } else if (model === "o3-mini") {
-        // O3-mini doesn't support temperature at all
-      } else {
-        // For other completion models (like o3-pro), use temperature 0.2
-        completionRequestBody.temperature = 0.2;
-      }
-
-      console.log("Completions request body:", completionRequestBody);
-
-      response = await fetch("https://api.openai.com/v1/completions", {
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify(completionRequestBody),
+        body: JSON.stringify(chatRequestBody),
       });
 
       data = await response.json();
@@ -395,24 +409,103 @@ async function getAIMove(fen, customPrompt = null) {
 
       try {
         const usage = data.usage || {};
-        const pt = usage.prompt_tokens ?? estimateTokensFromText(fullPrompt);
-        const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.text || "");
+        const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
+        const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.message?.content || "");
         recordMoveUsage(model, pt, ct);
       } catch (e) { /* no-op */ }
-      return data.choices[0].text.trim();
-    }
+      return data.choices[0].message.content.trim();
+    } else {
+      // For other models, try chat completions first, then fall back to completions
+      const chatRequestBody = {
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 30,
+      };
 
-    // If we get here, there was an error with chat completions that wasn't about model type
-    if (data.error) {
-      if (data.error.code === "invalid_api_key") {
-        throw new Error(
-          "Invalid API key. Please check your key and try again."
-        );
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(chatRequestBody),
+      });
+
+      data = await response.json();
+
+      // If chat completions works, return the result
+      if (!data.error) {
+        try {
+          const usage = data.usage || {};
+          const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
+          const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.message?.content || "");
+          recordMoveUsage(model, pt, ct);
+        } catch (e) { /* no-op */ }
+        return data.choices[0].message.content.trim();
       }
-      throw new Error(data.error.message || "OpenAI API error");
-    }
 
-    return data.choices[0].message.content.trim();
+      // If model isn't a chat model, fall back to text completions
+      if (
+        data.error &&
+        (data.error.type === "invalid_request_error" ||
+          /not supported in the v1\/chat\/completions endpoint/i.test(
+            data.error.message || ""
+          ))
+      ) {
+        const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+        const completionRequestBody = {
+          model: model,
+          prompt: fullPrompt,
+          max_tokens: 50,
+        };
+
+        // Models that ignore temperature—leave unset
+        console.log("Completions request body:", completionRequestBody);
+
+        response = await fetch("https://api.openai.com/v1/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(completionRequestBody),
+        });
+
+        data = await response.json();
+
+        if (data.error) {
+          if (data.error.code === "invalid_api_key") {
+            throw new Error(
+              "Invalid API key. Please check your key and try again."
+            );
+          }
+          throw new Error(data.error.message || "OpenAI API error");
+        }
+
+        try {
+          const usage = data.usage || {};
+          const pt = usage.prompt_tokens ?? estimateTokensFromText(fullPrompt);
+          const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.text || "");
+          recordMoveUsage(model, pt, ct);
+        } catch (e) { /* no-op */ }
+        return data.choices[0].text.trim();
+      }
+
+      // If we get here, there was an error with chat completions that we can't handle
+      if (data.error) {
+        if (data.error.code === "invalid_api_key") {
+          throw new Error(
+            "Invalid API key. Please check your key and try again."
+          );
+        }
+        throw new Error(data.error.message || "OpenAI API error");
+      }
+    }
   } catch (err) {
     console.error("OpenAI API error:", err);
     throw err;
