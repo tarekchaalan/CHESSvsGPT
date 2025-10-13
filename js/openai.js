@@ -351,6 +351,26 @@ function getRetryPrompt(fen, previousIllegalMove) {
   return prompt;
 }
 
+// Extract plain text from a chat message, supporting both string and array content formats
+function extractMessageText(message) {
+  if (!message) return "";
+  const content = message.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    // Newer models may return an array of content parts; concat any text-like parts
+    return content
+      .map(part => {
+        if (!part) return "";
+        if (typeof part === "string") return part;
+        if (typeof part.text === "string") return part.text;
+        if (typeof part.content === "string") return part.content;
+        return "";
+      })
+      .join("");
+  }
+  return "";
+}
+
 async function getAIMove(fen, customPrompt = null) {
   const apiKey = await getStoredApiKey();
   if (!apiKey) {
@@ -410,10 +430,35 @@ async function getAIMove(fen, customPrompt = null) {
       try {
         const usage = data.usage || {};
         const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
-        const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.message?.content || "");
+        const raw = data.choices?.[0]?.message;
+        let text = extractMessageText(raw).trim();
+        const ct = usage.completion_tokens ?? estimateTokensFromText(text);
         recordMoveUsage(model, pt, ct);
+        if (!text) {
+          // Retry once with a simplified single-message prompt
+          const simplifiedPrompt = `You are playing chess as Black. The current position is: ${fen}. Return ONLY the best move in SAN notation (like "Nf6" or "Qxd4+"). No other text.`;
+          const retryBody = {
+            model,
+            messages: [ { role: "user", content: simplifiedPrompt } ],
+            max_completion_tokens: 30,
+          };
+          const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(retryBody),
+          });
+          const retryData = await retryResp.json();
+          if (retryData && !retryData.error) {
+            const retryText = extractMessageText(retryData.choices?.[0]?.message).trim();
+            if (retryText) return retryText;
+          }
+        }
+        return text;
       } catch (e) { /* no-op */ }
-      return data.choices[0].message.content.trim();
+      return data.choices[0]?.message?.content?.trim?.() || "";
     } else {
       // For other models, try chat completions first, then fall back to completions
       const chatRequestBody = {
