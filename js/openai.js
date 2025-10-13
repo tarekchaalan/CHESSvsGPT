@@ -351,6 +351,28 @@ function getRetryPrompt(fen, previousIllegalMove) {
   return prompt;
 }
 
+function buildPrompts(fen) {
+  const game = new Chess(fen);
+  const asciiBoard = getASCIIBoard(fen);
+  const toPlay = game.turn() === "w" ? "White" : "Black";
+  const material = getMaterialBalance(game);
+
+  const systemPrompt = "Return the single best move for Black in SAN format (e.g., \"Nf6\", \"Qxd4+\"). Do not include any commentary or extra text.";
+
+  let userPrompt = "";
+  userPrompt += `Position (FEN): ${fen}\n\n`;
+  userPrompt += `Board:\n${asciiBoard}\n`;
+  userPrompt += `Side to move: ${toPlay}\n`;
+  userPrompt += `Material balance: ${material}\n\n`;
+  userPrompt += `Rules:\n`;
+  userPrompt += `1. Return only one legal move for Black in SAN.\n`;
+  userPrompt += `2. Do not add commentary or any extra text.\n`;
+  userPrompt += `3. Prefer solid, engine-like moves.\n\n`;
+  userPrompt += `Make your move as Black.`;
+
+  return { systemPrompt, userPrompt };
+}
+
 // Extract plain text from a chat message, supporting both string and array content formats
 function extractMessageText(message) {
   if (!message) return "";
@@ -380,8 +402,9 @@ async function getAIMove(fen, customPrompt = null) {
   }
 
   const model = localStorage.getItem("openai_model") || "gpt-5";
-  const systemPrompt = customPrompt || getGameStatePrompt(fen);
-  const userPrompt = `Make your move as Black.`;
+  const prompts = buildPrompts(fen);
+  const systemPrompt = prompts.systemPrompt;
+  const userPrompt = prompts.userPrompt;
 
   console.log("=== AI Move Prompt ===");
   console.log("System Prompt:", systemPrompt);
