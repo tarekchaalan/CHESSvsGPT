@@ -198,11 +198,15 @@ function getASCIIBoard(fen) {
 // === Model Pricing (USD per 1M tokens) ===
 // GPT-5 family & 4o family (values shown in modal)
 const MODEL_PRICING = {
-  "gpt-5":        { inputPerM: 1.25, outputPerM: 10.0, source: "https://openai.com/api/pricing/" },
-  "gpt-5-mini":   { inputPerM: 0.25, outputPerM: 2.0,  source: "https://openai.com/api/pricing/" },
-  "gpt-5-nano":   { inputPerM: 0.05, outputPerM: 0.4,  source: "https://openai.com/api/pricing/" },
-  "gpt-4o":       { inputPerM: 2.50, outputPerM: 10.0, source: "https://platform.openai.com/docs/models/gpt-4o" },
-  "gpt-4o-mini":  { inputPerM: 0.15, outputPerM: 0.60, source: "https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/" },
+  "gpt-5":        { inputPerM: 1.25, outputPerM: 10.0,  source: "https://openai.com/api/pricing/" },
+  "gpt-5-mini":   { inputPerM: 0.25, outputPerM: 2.0,   source: "https://openai.com/api/pricing/" },
+  "gpt-5-nano":   { inputPerM: 0.05, outputPerM: 0.4,   source: "https://openai.com/api/pricing/" },
+  "gpt-4.1":      { inputPerM: 2.00, outputPerM: 8.0,   source: "https://openai.com/api/pricing/" },
+  "gpt-4.1-mini": { inputPerM: 0.40, outputPerM: 1.60,  source: "https://openai.com/api/pricing/" },
+  "gpt-4.1-nano": { inputPerM: 0.10, outputPerM: 0.40,  source: "https://openai.com/api/pricing/" },
+  "gpt-4o":       { inputPerM: 2.50, outputPerM: 10.0,  source: "https://openai.com/api/pricing/" },
+  "gpt-4o-mini":  { inputPerM: 0.15, outputPerM: 0.60,  source: "https://openai.com/api/pricing/" },
+  "o4-mini":      { inputPerM: 1.10, outputPerM: 4.40,  source: "https://openai.com/api/pricing/" },
 };
 
 function getPricingForModel(model) {
@@ -393,6 +397,16 @@ function extractMessageText(message) {
   return "";
 }
 
+// Model capability detection
+function isReasoningModel(model) {
+  // GPT-5 family and o-series are reasoning models that do NOT support
+  // the temperature parameter and need higher max_completion_tokens
+  return model.startsWith('gpt-5') ||
+         model.startsWith('o1') ||
+         model.startsWith('o3') ||
+         model.startsWith('o4');
+}
+
 async function getAIMove(fen, customPrompt = null) {
   const apiKey = await getStoredApiKey();
   if (!apiKey) {
@@ -401,141 +415,73 @@ async function getAIMove(fen, customPrompt = null) {
     );
   }
 
-  const model = localStorage.getItem("openai_model") || "gpt-5";
+  const model = localStorage.getItem("openai_model") || "gpt-5-nano";
   const prompts = buildPrompts(fen);
   const systemPrompt = prompts.systemPrompt;
   const userPrompt = prompts.userPrompt;
+  const reasoning = isReasoningModel(model);
 
   console.log("=== AI Move Prompt ===");
   console.log("System Prompt:", systemPrompt);
   console.log("User Prompt:", userPrompt);
   console.log("Model:", model);
+  console.log("Reasoning model:", reasoning);
   console.log("====================");
 
   try {
     let response;
     let data;
 
-    // GPT-5 models are always chat models, so use chat completions for them
-    const isGPT5Model = model.startsWith('gpt-5');
+    // Build request body with model-aware parameters
+    const chatRequestBody = {
+      model,
+      max_completion_tokens: reasoning ? 1024 : 30,
+    };
 
-    if (isGPT5Model) {
-      // For GPT-5 models, only use chat completions
-      const chatRequestBody = {
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_completion_tokens: 30,
-        temperature: 1,
-      };
-
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(chatRequestBody),
-      });
-
-      data = await response.json();
-
-      if (data.error) {
-        if (data.error.code === "invalid_api_key") {
-          throw new Error(
-            "Invalid API key. Please check your key and try again."
-          );
-        }
-        throw new Error(data.error.message || "OpenAI API error");
-      }
-
-      try {
-        const usage = data.usage || {};
-        const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
-        const raw = data.choices?.[0]?.message;
-        let text = extractMessageText(raw).trim();
-        const ct = usage.completion_tokens ?? estimateTokensFromText(text);
-        recordMoveUsage(model, pt, ct);
-        if (!text) {
-          // Retry once with a simplified single-message prompt
-          const simplifiedPrompt = `You are playing chess as Black. The current position is: ${fen}. Return ONLY the best move in SAN notation (like "Nf6" or "Qxd4+"). No other text.`;
-          const retryBody = {
-            model,
-            messages: [ { role: "user", content: simplifiedPrompt } ],
-            max_completion_tokens: 30,
-            temperature: 1,
-          };
-          const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify(retryBody),
-          });
-          const retryData = await retryResp.json();
-          if (retryData && !retryData.error) {
-            const retryText = extractMessageText(retryData.choices?.[0]?.message).trim();
-            if (retryText) return retryText;
-          }
-        }
-        return text;
-      } catch (e) { /* no-op */ }
-      return extractMessageText(data.choices?.[0]?.message).trim();
+    // Reasoning models: merge prompts into a single user message (they handle system role poorly)
+    // Standard models: use separate system and user messages
+    if (reasoning) {
+      chatRequestBody.messages = [
+        { role: "user", content: systemPrompt + "\n\n" + userPrompt },
+      ];
+      // Do NOT set temperature — reasoning models don't support it
     } else {
-      // For other models, try chat completions first, then fall back to completions
-      const chatRequestBody = {
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 1,
-        max_completion_tokens: 30,
-      };
+      chatRequestBody.messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ];
+      chatRequestBody.temperature = 0.2;
+    }
 
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(chatRequestBody),
-      });
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(chatRequestBody),
+    });
 
-      data = await response.json();
+    data = await response.json();
 
-      // If chat completions works, return the result
-      if (!data.error) {
-        try {
-          const usage = data.usage || {};
-          const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
-          const ct = usage.completion_tokens ?? estimateTokensFromText(data.choices?.[0]?.message?.content || "");
-          recordMoveUsage(model, pt, ct);
-        } catch (e) { /* no-op */ }
-        return data.choices[0].message.content.trim();
-      }
-
-      // If model isn't a chat model, fall back to text completions
+    // Handle errors from chat completions
+    if (data.error) {
+      // For non-reasoning models, try falling back to legacy completions endpoint
       if (
-        data.error &&
+        !reasoning &&
         (data.error.type === "invalid_request_error" ||
           /not supported in the v1\/chat\/completions endpoint/i.test(
             data.error.message || ""
           ))
       ) {
         const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-
         const completionRequestBody = {
           model: model,
           prompt: fullPrompt,
           max_completion_tokens: 50,
         };
 
-        // Models that ignore temperature—leave unset
-        console.log("Completions request body:", completionRequestBody);
+        console.log("Falling back to completions endpoint:", completionRequestBody);
 
         response = await fetch("https://api.openai.com/v1/completions", {
           method: "POST",
@@ -550,9 +496,7 @@ async function getAIMove(fen, customPrompt = null) {
 
         if (data.error) {
           if (data.error.code === "invalid_api_key") {
-            throw new Error(
-              "Invalid API key. Please check your key and try again."
-            );
+            throw new Error("Invalid API key. Please check your key and try again.");
           }
           throw new Error(data.error.message || "OpenAI API error");
         }
@@ -566,16 +510,58 @@ async function getAIMove(fen, customPrompt = null) {
         return data.choices[0].text.trim();
       }
 
-      // If we get here, there was an error with chat completions that we can't handle
-      if (data.error) {
-        if (data.error.code === "invalid_api_key") {
-          throw new Error(
-            "Invalid API key. Please check your key and try again."
-          );
-        }
-        throw new Error(data.error.message || "OpenAI API error");
+      if (data.error.code === "invalid_api_key") {
+        throw new Error("Invalid API key. Please check your key and try again.");
+      }
+      throw new Error(data.error.message || "OpenAI API error");
+    }
+
+    // Extract text from successful chat completion response
+    const raw = data.choices?.[0]?.message;
+    console.log("API raw response:", JSON.stringify(raw));
+    console.log("API finish_reason:", data.choices?.[0]?.finish_reason);
+
+    let text = extractMessageText(raw).trim();
+
+    // Record usage
+    try {
+      const usage = data.usage || {};
+      const pt = usage.prompt_tokens ?? estimateTokensFromText(systemPrompt + "\n\n" + userPrompt);
+      const ct = usage.completion_tokens ?? estimateTokensFromText(text);
+      recordMoveUsage(model, pt, ct);
+    } catch (e) { /* no-op */ }
+
+    // If we got an empty response, retry once with a simplified prompt
+    if (!text) {
+      console.log("Empty response from model, retrying with simplified prompt...");
+      const simplifiedPrompt = `You are playing chess as Black. The current position is: ${fen}. Return ONLY the best move in SAN notation (like "Nf6" or "Qxd4+"). No other text.`;
+      const retryBody = {
+        model,
+        messages: [{ role: "user", content: simplifiedPrompt }],
+        max_completion_tokens: reasoning ? 1024 : 30,
+      };
+      // Only add temperature for non-reasoning models
+      if (!reasoning) {
+        retryBody.temperature = 0.2;
+      }
+
+      const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(retryBody),
+      });
+      const retryData = await retryResp.json();
+      console.log("Retry raw response:", JSON.stringify(retryData.choices?.[0]?.message));
+      if (retryData && !retryData.error) {
+        const retryText = extractMessageText(retryData.choices?.[0]?.message).trim();
+        if (retryText) return retryText;
       }
     }
+
+    return text;
   } catch (err) {
     console.error("OpenAI API error:", err);
     throw err;

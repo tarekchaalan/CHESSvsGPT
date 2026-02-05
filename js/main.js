@@ -311,10 +311,15 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("persistentStorage");
 
   // Load saved preferences
-  const savedModel = localStorage.getItem("openai_model") || "gpt-4";
+  const savedModel = localStorage.getItem("openai_model") || "gpt-5-nano";
   const usePersistentStorage =
     localStorage.getItem("use_persistent_storage") === "true";
   modelSelect.value = savedModel;
+  // If the saved model isn't in the dropdown, fall back to default
+  if (!modelSelect.value || modelSelect.selectedIndex === -1) {
+    modelSelect.value = "gpt-5-nano";
+    localStorage.setItem("openai_model", "gpt-5-nano");
+  }
   persistentStorageCheckbox.checked = usePersistentStorage;
 
   // Load saved API key asynchronously with performance optimization
@@ -399,7 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
     removeStoredApiKey();
     localStorage.removeItem("openai_model");
     apiKeyInput.value = "";
-    modelSelect.value = "gpt-4";
+    modelSelect.value = "gpt-5-nano";
     apiKeyStatus.textContent = "API key and model removed";
   });
 });
@@ -466,7 +471,9 @@ function updateStatus() {
   const statusEl = document.getElementById("status");
   if (game.game_over()) {
     if (game.in_checkmate()) {
-      statusEl.textContent = game.turn() === "w" ? "GPT4 Wins!" : "You Win!";
+      const winModel = localStorage.getItem("openai_model") || "gpt-5-nano";
+      const winDisplayName = getModelDisplayName(winModel);
+      statusEl.textContent = game.turn() === "w" ? `${winDisplayName} Wins!` : "You Win!";
       playGameEndSound(); // Play game end sound for checkmate
     } else if (game.in_draw()) {
       statusEl.textContent = "Draw!";
@@ -579,7 +586,8 @@ async function makeAIMove() {
     const statusEl = document.getElementById("status");
     if (error.message.includes("API key")) {
       statusEl.textContent = error.message;
-      modal.style.display = "block";
+      const apiKeyModal = document.getElementById("apiKeyModal");
+      if (apiKeyModal) apiKeyModal.style.display = "block";
     } else {
       statusEl.textContent = "Error: " + error.message;
     }
@@ -767,7 +775,7 @@ document.getElementById("exportBtn").addEventListener("click", exportGame);
 
 // Add these functions after the existing code
 function generatePGN() {
-  const model = localStorage.getItem("openai_model") || "gpt-4";
+  const model = localStorage.getItem("openai_model") || "gpt-5-nano";
   const modelDisplayName = getModelDisplayName(model);
   const currentDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
 
@@ -815,13 +823,20 @@ function generatePGN() {
 
 function getModelDisplayName(model) {
   const modelNames = {
+    "gpt-5": "GPT-5",
+    "gpt-5-mini": "GPT-5 Mini",
+    "gpt-5-nano": "GPT-5 Nano",
+    "gpt-4.1": "GPT-4.1",
+    "gpt-4.1-mini": "GPT-4.1 Mini",
+    "gpt-4.1-nano": "GPT-4.1 Nano",
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-mini": "GPT-4o Mini",
+    "o4-mini": "o4-mini",
     "o3-2025-04-16": "O3",
     "gpt-4-0125-preview": "GPT-4.5",
     "gpt-4-1106-preview": "GPT-4 Turbo",
     "gpt-4": "GPT-4",
-    "gpt-4o": "GPT-4o",
     "o4-mini-2025-04-16": "O4-Mini",
-    "gpt-4o-mini": "GPT-4o Mini",
     "o3-mini-2025-01-31": "O3-Mini",
     "gpt-3.5-turbo": "GPT-3.5 Turbo",
   };
