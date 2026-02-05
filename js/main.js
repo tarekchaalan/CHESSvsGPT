@@ -27,7 +27,7 @@ const premoveSound = new Audio("sound/premove.mp3");
 // Sound playing functions
 function playSound(audio) {
   audio.currentTime = 0; // Reset to beginning
-  audio.play().catch((e) => console.log("Sound play failed:", e));
+  audio.play().catch(() => {});
 }
 
 function playMoveSound(isPlayerMove = true) {
@@ -322,6 +322,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   persistentStorageCheckbox.checked = usePersistentStorage;
 
+  // Load illegal move behavior preference
+  const savedIllegalBehavior = localStorage.getItem("illegal_move_behavior") || "user_play";
+  const illegalRadio = document.querySelector(`input[name="illegalMoveBehavior"][value="${savedIllegalBehavior}"]`);
+  if (illegalRadio) illegalRadio.checked = true;
+
+  // Save illegal move behavior when changed
+  document.querySelectorAll('input[name="illegalMoveBehavior"]').forEach(radio => {
+    radio.addEventListener("change", (e) => {
+      localStorage.setItem("illegal_move_behavior", e.target.value);
+    });
+  });
+
   // Load saved API key asynchronously with performance optimization
   const loadSavedApiKey = async () => {
     try {
@@ -500,6 +512,96 @@ function updateStatus() {
   }
 }
 
+// Handle AI illegal move based on user preference
+function handleIllegalMoveFallback(aiMove, statusEl) {
+  const behavior = localStorage.getItem("illegal_move_behavior") || "user_play";
+
+  if (behavior === "force_move") {
+    statusEl.textContent = "AI made an illegal move. Forcing it on the board...";
+    const forced = forceIllegalMove(aiMove);
+    if (forced) {
+      playMoveSound(false);
+      board.position(game.fen());
+      updateStatus();
+      return true;
+    }
+    // Could not parse the move — fall through to user_play
+  }
+
+  if (behavior === "random_legal") {
+    const legalMoves = game.moves();
+    if (legalMoves.length > 0) {
+      const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+      const result = game.move(randomMove);
+      if (result) {
+        statusEl.textContent = `AI failed. Playing random legal move: ${randomMove}`;
+        if (result.captured) {
+          playCaptureSound();
+        } else {
+          playMoveSound(false);
+        }
+        board.position(game.fen());
+        updateStatus();
+        return true;
+      }
+    }
+  }
+
+  // Default: "user_play"
+  userPlayingForAI = true;
+  statusEl.textContent = "AI made an illegal move. Please make a move for Black.";
+  return false;
+}
+
+// Attempt to force an illegal move onto the board by manipulating pieces directly
+function forceIllegalMove(moveStr) {
+  try {
+    // Try coordinate notation first (e.g., "e7e5", "a2a4")
+    const coordMatch = moveStr.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
+    let from, to;
+
+    if (coordMatch) {
+      from = coordMatch[1];
+      to = coordMatch[2];
+    } else {
+      // Try to extract squares from the string
+      const squares = moveStr.match(/[a-h][1-8]/g);
+      if (squares && squares.length >= 2) {
+        from = squares[0];
+        to = squares[1];
+      } else {
+        // Single-square SAN (e.g., "Nf6") — can't determine source without chess.js
+        return false;
+      }
+    }
+
+    // Get the piece at the source square
+    const piece = game.get(from);
+    if (!piece) return false;
+
+    // Move the piece: remove from source, clear target, place at target
+    game.remove(to);
+    game.remove(from);
+    game.put(piece, to);
+
+    // Toggle the side to move via FEN manipulation
+    const fen = game.fen();
+    const fenParts = fen.split(' ');
+    fenParts[1] = fenParts[1] === 'w' ? 'b' : 'w';
+    fenParts[4] = String(parseInt(fenParts[4]) + 1); // half-move clock
+    if (fenParts[1] === 'w') {
+      fenParts[5] = String(parseInt(fenParts[5]) + 1); // full-move number
+    }
+    fenParts[3] = '-'; // clear en passant
+    game.load(fenParts.join(' '));
+
+    return true;
+  } catch (e) {
+    console.error("Failed to force illegal move:", e);
+    return false;
+  }
+}
+
 async function makeAIMove() {
   try {
     const fen = game.fen();
@@ -532,9 +634,7 @@ async function makeAIMove() {
 
       // Check if the retry move is the same as the original illegal move
       if (retryMove === aiMove) {
-        userPlayingForAI = true;
-        statusEl.textContent =
-          "AI repeated the same illegal move. Please make a move for Black.";
+        handleIllegalMoveFallback(aiMove, statusEl);
         return;
       }
 
@@ -553,10 +653,8 @@ async function makeAIMove() {
         board.position(game.fen());
         updateStatus();
       } else {
-        // AI failed twice, let user play for AI
-        userPlayingForAI = true;
-        statusEl.textContent =
-          "AI made another illegal move. Please make a move for Black.";
+        // AI failed twice — use the configured fallback behavior
+        handleIllegalMoveFallback(retryMove, statusEl);
       }
       return;
     }
@@ -763,9 +861,6 @@ document.getElementById("apiKeyBtn").insertAdjacentHTML(
     </button>
   </div>`
 );
-
-// Update the API Key button text
-document.getElementById("apiKeyBtn").textContent = "Manage API Key";
 
 // Add event listeners for the new buttons
 document.getElementById("restartBtn").addEventListener("click", restartGame);

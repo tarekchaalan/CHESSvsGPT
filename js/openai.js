@@ -407,6 +407,32 @@ function isReasoningModel(model) {
          model.startsWith('o4');
 }
 
+// Fetch wrapper with automatic retry on server errors (5xx)
+async function fetchWithRetry(url, options, maxRetries = 1) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status >= 500 && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Server error ${response.status}, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Network error, retrying in ${delay}ms...`, err.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+    }
+  }
+  throw lastError || new Error("Request failed after retries");
+}
+
 async function getAIMove(fen, customPrompt = null) {
   const apiKey = await getStoredApiKey();
   if (!apiKey) {
@@ -435,7 +461,7 @@ async function getAIMove(fen, customPrompt = null) {
     // Build request body with model-aware parameters
     const chatRequestBody = {
       model,
-      max_completion_tokens: reasoning ? 1024 : 30,
+      max_completion_tokens: reasoning ? 4096 : 30,
     };
 
     // Reasoning models: merge prompts into a single user message (they handle system role poorly)
@@ -453,7 +479,7 @@ async function getAIMove(fen, customPrompt = null) {
       chatRequestBody.temperature = 0.2;
     }
 
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
+    response = await fetchWithRetry("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -483,7 +509,7 @@ async function getAIMove(fen, customPrompt = null) {
 
         console.log("Falling back to completions endpoint:", completionRequestBody);
 
-        response = await fetch("https://api.openai.com/v1/completions", {
+        response = await fetchWithRetry("https://api.openai.com/v1/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -538,14 +564,14 @@ async function getAIMove(fen, customPrompt = null) {
       const retryBody = {
         model,
         messages: [{ role: "user", content: simplifiedPrompt }],
-        max_completion_tokens: reasoning ? 1024 : 30,
+        max_completion_tokens: reasoning ? 4096 : 30,
       };
       // Only add temperature for non-reasoning models
       if (!reasoning) {
         retryBody.temperature = 0.2;
       }
 
-      const retryResp = await fetch("https://api.openai.com/v1/chat/completions", {
+      const retryResp = await fetchWithRetry("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
